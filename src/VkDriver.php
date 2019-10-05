@@ -2,6 +2,7 @@
 
 namespace BotMan\Drivers\VK;
 
+use BotMan\BotMan\Messages\Attachments\Image;
 use Illuminate\Support\Collection;
 use BotMan\BotMan\Drivers\HttpDriver;
 use BotMan\Drivers\VK\Extensions\User;
@@ -14,9 +15,13 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ParameterBag;
 use BotMan\BotMan\Messages\Incoming\IncomingMessage;
 use BotMan\BotMan\Messages\Outgoing\OutgoingMessage;
+use VK\Client\VKApiClient;
+
 
 class VkDriver extends HttpDriver implements VerifiesService
 {
+    public static $responseSent = false;
+
     const DRIVER_NAME = 'Vk';
 
     const API_VERSION = '5.80';
@@ -27,9 +32,9 @@ class VkDriver extends HttpDriver implements VerifiesService
     const MESSAGE_NEW_EVENT = 'message_new';
 
     const EVENTS = [
-        'confirmation',
-        'message_edit',
-        'message_new',
+        self::CONFIRMATION_EVENT,
+        self::MESSAGE_EDIT_EVENT,
+        self::MESSAGE_NEW_EVENT,
     ];
 
     protected $endpoint = 'messages.send';
@@ -149,6 +154,27 @@ class VkDriver extends HttpDriver implements VerifiesService
             $parameters['message'] = $message->getText();
         } elseif ($message instanceof OutgoingMessage) {
             $parameters['message'] = $message->getText();
+
+            $attachment = $message->getAttachment();
+            if ($attachment) {
+                $vk = new VKApiClient(static::API_VERSION);
+
+                switch (true) {
+                    case $attachment instanceof Image:
+                        $url = $attachment->getUrl();
+                        if (null !== parse_url($url, PHP_URL_HOST)) { // path is not local TODO: refactor
+                            $url = tempnam(sys_get_temp_dir(), 'vk_upload_photo') .'.'.pathinfo($attachment->getUrl(), PATHINFO_EXTENSION);
+                            file_put_contents($url, file_get_contents($attachment->getUrl()));
+                        }
+
+                        $uploadServer = $vk->photos()->getMessagesUploadServer($this->config->get('token'));
+                        $photo = $vk->getRequest()->upload($uploadServer['upload_url'], 'photo', $url);
+                        $photoResponse = $vk->photos()->saveMessagesPhoto($this->config->get('token'), $photo);
+                        $photoInfo = array_pop($photoResponse);
+                        $parameters['attachment'] = "photo{$photoInfo['owner_id']}_{$photoInfo['id']}";
+                        break;
+                }
+            }
         } else {
             $parameters['message'] = $message;
         }
@@ -179,6 +205,16 @@ class VkDriver extends HttpDriver implements VerifiesService
         $this->config = Collection::make($this->config->get('vk'));
         $this->queryParameters = Collection::make($request->query);
         $this->content = $request->getContent();
+
+        // VK needs single OK for request response everywhere but in confirmation
+        $type = $this->payload->get('type',null);
+        if (self::CONFIRMATION_EVENT != $type) {
+            if (!VkDriver::$responseSent) {
+                VkDriver::$responseSent = true;
+
+                echo 'ok';
+            }
+        }
     }
 
     /**
@@ -226,8 +262,10 @@ class VkDriver extends HttpDriver implements VerifiesService
      */
     public function verifyRequest(Request $request)
     {
-        if ($this->payload->get('type') === self::CONFIRMATION_EVENT &&
-            $this->payload->get('group_id') == $this->config->get('group_id')) {
+        if (
+            $this->payload->get('type') === self::CONFIRMATION_EVENT
+            && $this->payload->get('group_id') == $this->config->get('group_id')
+        ) {
             return Response::create($this->config->get('verification'))->send();
         }
 

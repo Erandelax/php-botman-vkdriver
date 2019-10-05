@@ -1,5 +1,5 @@
 {
-    "name": "iboldurev/botman-driver-vk",
+    "name": "Erandelax/php-botman-vkdriver",
     "description": "VK driver for botman",
     "keywords": [
         "Bot",
@@ -7,17 +7,26 @@
         "VK",
         "VK Community"
     ],
-    "homepage": "http://github.com/iboldurev/botman-driver-vk",
+    "homepage": "https://github.com/Erandelax/php-botman-vkdriver",
     "license": "MIT",
     "authors": [
         {
             "name": "Ivan Boldyrev",
             "email": "iboldurev@gmail.com"
+        },
+        {
+            "name": "Tsepkov Artem",
+            "email": "tzepart@gmail.com"
+        },
+        {
+            "name": "Alexander Paliy",
+            "email": "erandelax@gmail.com"
         }
     ],
     "require": {
         "php": ">=7.0",
-        "botman/botman": "~2.0"
+        "botman/botman": "~2.0",
+        "vkcom/vk-php-sdk": "^5.101"
     },
     "require-dev": {
         "botman/studio-addons": "~1.0",
